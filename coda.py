@@ -2,7 +2,7 @@ import argparse
 
 import numpy as np
 import pandas as pd
-# import statsmodels.api as sm  # Used for now deprecated CrossoverDetector.smooth_noise2()
+# import statsmodels.api as sm  # Used for now deprecated CrossoverDetector._smooth_noise2()
 pd.options.mode.chained_assignment = None
 
 from hmmlearn import hmm
@@ -45,8 +45,8 @@ class CrossoverDetector():
             msg = f'[{ts}, {level_names[level].rjust(5)}] ' + message
             print(msg)
 
-    def preprocess(self, bedgraph: str, method='arbitrary', group_count=20, bin_size=6000):
-        self._log(0, 'Aggregating sample bedgraph={}, method={}, group_count={}, bin_size={}.'.format(\
+    def transform_data(self, bedgraph: str, method='arbitrary', group_count=20, bin_size=6000):
+        self._log(0, 'transform_data(bedgraph="{}", method="{}", group_count={}, bin_size={}.'.format(\
                         bedgraph, method, group_count, bin_size))
         # Load coverage file
         try:
@@ -84,10 +84,9 @@ class CrossoverDetector():
         self._flags['is_loaded'] = True
 
         self._log(1, f"Successfully loaded '{self._sample_name}'. Mean coverage is {self._avg_cov}.")
-        # print(self._data.val.describe())
 
-    def read_context(self, fname: str):
-        self._log(0, f'Reading centromere boundries from file "{fname}".')
+    def _read_context(self, fname: str):
+        self._log(0, f'_read_context(fname="{fname}")')
         df = pd.read_csv(fname, sep='\t', header=None, names=['chrm','start','end'], usecols=[0,1,2])
         df.chrm = df.chrm.str.replace(r'\D', '', regex=True).astype(int)    # Strip notation
         df.set_index('chrm', inplace=True)
@@ -95,7 +94,7 @@ class CrossoverDetector():
         self._flags['cent_data'] = True
         
     def _hmm_init(self, n_components=3, **kwargs):
-        self._log(0, f'Initializing new HM model. n_components = {n_components}, Passing args = {str(kwargs)}')
+        self._log(0, f'_hmm_init(n_components="{n_components}", **kwargs={kwargs})')
         if n_components < 2:
             self._log(2, f'Can not initiate model with fewer than 2 states. Quitting.')
             return
@@ -117,8 +116,8 @@ class CrossoverDetector():
         hm_model.sample_names = []
         self.HMM = hm_model
 
-    def load_pickle(self, fname: str):
-        self._log(0, f'Loading pickled HMM from file "{fname}".')
+    def _load_model(self, fname: str):
+        self._log(0, f'_load_model(fname="{fname}")')
         try:
             with open(fname, 'rb+') as f:
                 hm_model = pickle.load(f)
@@ -128,8 +127,8 @@ class CrossoverDetector():
             self._log(2, f'Failed to load HMM pickle from file "{fname}". Initializing new model. {ex}')
             self._hmm_init()
 
-    def fit_hmm(self, output_pickle=False):
-        self._log(0, f'Fitting HMM. Output file = {output_pickle}.')
+    def _fit_model(self, output_file=False):
+        self._log(0, f'_fit_model(output_file="{output_file}")')
         # Drop the noisy centromeric regions from the input data
         if self._flags['cent_data']:
             self._log(0, f'Dropping centromeric regions from input.')
@@ -154,19 +153,19 @@ class CrossoverDetector():
         self.HMM.sample_names.append(self._sample_name)
         self._flags['is_fit'] = True
 
-        if output_pickle:
-            self._log(1, f'Writing updated HMM to "{output_pickle}".')
+        if output_file:
+            self._log(1, f'Writing updated HMM to "{output_file}".')
             try:
-                with open(output_pickle, 'wb+') as f:
+                with open(output_file, 'wb+') as f:
                     pickle.dump(self.HMM, f)
             except Exception as ex:
-                self._log(3, f'Failed to write to "{output_pickle}". Please check the directory exists and has suitable permissions.\n{ex}')
+                self._log(3, f'Failed to write to "{output_file}". Please check the directory exists and has suitable permissions.\n{ex}')
 
 
     def _predict_hmm(self):
-        self._log(0, f'Predicting most likely state based on HMM.')
+        self._log(0, f'_predict_hmm()')
         if not self._flags['is_fit']:
-            self._log(3, "Model has not been fitted. Run CrossoverDetector.fit_hmm first.")
+            self._log(3, "Model has not been fitted.")
             return
         seq_reshape = [np.reshape(seq, (len(seq), 1)) for seq in self.sequences]
         preds = [self.HMM.predict(seq) for seq in seq_reshape]
@@ -188,7 +187,7 @@ class CrossoverDetector():
         self._data_predictions = data_predictions
     
     def _extract_shift_pos(self, column='pred'):
-        self._log(0, f'Exctracting transition points, column = "{column}".')
+        self._log(0, f'_extract_shift_pos(column="{column}")')
         data_diff = self._data_predictions.copy()
         data_diff['diff'] = 1
         data_diff['diff'].iloc[:-1] = data_diff[column][:-1].values - data_diff[column][1:].values
@@ -202,7 +201,7 @@ class CrossoverDetector():
         self._suspects = found_positions.dropna()
 
     def _smooth_noise(self, window_size=5):    # Fill gaps
-        self._log(0, f'Smoothing noise by filling gaps <{window_size}.')
+        self._log(0, f'_smooth_noise(window_size={window_size})')
         self._data_predictions['smooth'] = -1
         prev_idx = False
         for idx, row in self._suspects.iterrows():
@@ -214,7 +213,7 @@ class CrossoverDetector():
         self._data_predictions['updated'] = np.where(self._data_predictions['smooth'] != -1, self._data_predictions['smooth'], self._data_predictions['pred'])
 
     def _smooth_noise2(self, smooth_frac=0.06):    # Local regression
-        self._log(0, f'Smoothing noise by applying local ({smooth_frac}) regression.')
+        self._log(0, f'_smooth_noise2(smooth_frace={smooth_frac})')
         if 'statsmodels.api' not in sys.modules:
             self._log(2, 'statsmodels.api, which is necessary for this smoothing model, has not been imported. Quitting.')
             return
@@ -226,7 +225,7 @@ class CrossoverDetector():
         self._data_predictions['updated'] = self._data_predictions['smooth'].round()
     
     def _smooth_noise3(self, window_size=20):    # Rolling mean
-        self._log(0, f'Smoothing by applying rolling mean. Window size = {window_size}.')
+        self._log(0, f'_smooth_noise3(window_size={window_size})')
         self._data_predictions['smooth'] = -1
         for chrm in self._data_predictions.chrm.unique():
             df_chrm = self._data_predictions[self._data_predictions.chrm == chrm]
@@ -234,8 +233,8 @@ class CrossoverDetector():
             self._data_predictions.loc[df_chrm.index, 'smooth'] = local_mean
         self._data_predictions['updated'] = self._data_predictions['smooth'].round()
 
-    def _realign_shifts(self, sus: pd.DataFrame, window_size=20):  # Local max
-        self._log(0, f'Smoothing by selecting largest jump in local (window = {window_size}) area.')
+    def _realign_shifts(self, sus: pd.DataFrame, window_size=20):  # Local max*
+        self._log(0, f'_realign_shifts(sus={(len(sus))}, window_size={window_size})')
         alt_sus = []
         for idx, row in sus.iterrows():
             if not (idx < window_size or idx + window_size >= self._data_predictions.index.max()):    # Skip chrm boundaries
@@ -251,7 +250,9 @@ class CrossoverDetector():
         alt_sus = pd.DataFrame(alt_sus).drop_duplicates()
         return alt_sus
 
-    def plot_hmm(self, comparison=True, pred_column='pred', to_fname=False):
+    def plot_hmm(self, comparison=True, val_column='pred', fname=False):
+        self._log(0, f'plot_hmm(comparison={comparison}, val_column="{val_column}", fname="{fname}")')
+        
         COLORS = ["magenta", "turquoise", "lightgreen", "cyan"]
         names = pd.unique(self._data.chrm)
         seq_count = len(names)
@@ -285,7 +286,7 @@ class CrossoverDetector():
                 ax1.set_title(names[n])
             
             # Filter predictions to each state
-            masks = [cur_seq[pred_column] == i for i in np.arange(self.HMM.n_components)]
+            masks = [cur_seq[val_column] == i for i in np.arange(self.HMM.n_components)]
         
             if comparison:
                 ax2 = plt.subplot(seq_count, 2, 3 + ((n % (seq_count/2)) * 4) + col)
@@ -313,12 +314,13 @@ class CrossoverDetector():
         # plt.figlegend()
         plt.tight_layout(rect=[0, 0.02, 1, 0.96]) # Rect to account for figure title
 
-        if not to_fname:
+        if not fname:
             plt.show()
         else:
-            plt.savefig(to_fname)
+            plt.savefig(fname)
     
     def try_match(self, cutoff=0.05, telomere_size=25000) -> pd.DataFrame:
+        self._log(0, f'try_match(cutoff={cutoff}, telomere_size={telomere_size})')
         xover_locations = self._suspects.copy()
         # Calculate position percentile in chromosome
         genome_names = xover_locations.chrm.str.replace(r'\d', '', regex=True).unique()
@@ -370,6 +372,7 @@ class CrossoverDetector():
         return res.copy()
 
     def _refine_crossovers(self) -> pd.DataFrame:
+        self._log(0, f'_refine_crossovers()')
         def get_source(idx: int):
             r_chrm = self._data_predictions.loc[idx, 'chrm']
             r_start = self._data_predictions.loc[idx-2, 'start']
@@ -402,6 +405,7 @@ class CrossoverDetector():
         return pd.DataFrame(refined_co)
 
     def lift_syri(self, syri_file, genome_a_name):
+        self._log(0, f'lift_syri(syri_file="{syri_file}", genome_a_name="{genome_a_name}")')
         names = ['a_chr', 'a_start', 'a_end', 'a_seq', 'b_seq',
                  'b_chr', 'b_start', 'b_end', 'id', 'parent_id', 'ann', 'cp']
         syri = pd.read_csv(syri_file, sep='\t', header=None,
@@ -420,54 +424,61 @@ class CrossoverDetector():
 
         return pd.concat(res, axis=1)
 
+    def genome_hmm_preprocess(self, bedgraph: str, context_fname: str,
+            method='arbitrary', group_count=20, bin_size=6000):
+        self._log(0, 'genome_hmm_preprocess(bedgraph="{}", method="{}", group_count={}, bin_size={}.'.format(\
+                        bedgraph, method, group_count, bin_size))
+        self._log(1, f'Reading centromere boundries from file "{context_fname}".')
+        self._log(1, f'Initializing new HM model. n_components = {n_components}, Passing args = {str(kwargs)}')
+
+
     def genome_hmm_fit(self, fname: str):
+        self._log(0, f'genome_hmm_fit(fname="{self._sample_name}")')
+        #
+        self._log(0, f'Loading pickled HMM from file "{fname}".')
+        #
         time_start = time.time()
-        self._log(1, f'Started genome_hmm_fit() on "{self._sample_name}"')
-        self._log(1, 'Fitting...')
-        self.fit_hmm(output_pickle=fname)
+        self._fit_model(output_file==fname)
         time_end = time.time()
         self._log(1, f'Done. Time taken: {round((time_end - time_start), 3)}sec. Saved to "{fname}".')
 
 
     def genome_hmm_detection(self, smooth_model='v1', smooth_window=10, match_cutoff=0.05, refine=False, **kwargs):
-        self._log(0, f'genome_hmm_detection(smooth_model={smooth_model}, \
-            smooth_window={smooth_window}, match_cutoff={match_cutoff}, refine={refine}, {kwargs})')
+        self._log(0, f'genome_hmm_detection(smooth_model={smooth_model}, ' +
+            f'smooth_window={smooth_window}, match_cutoff={match_cutoff}, refine={refine}, {kwargs})')
         self._log(1, f'Started genome_hmm_detection() on "{self._sample_name}"')
         if self._flags['is_fit'] == False:
             self._log(1, 'Fitting HMM based on this sample.')
-            self.fit_hmm()
+            self._fit_model()
         self._log(1, 'Predicting most likely state according to HMM.')
         self._predict_hmm()
         
         self._log(1, 'Extractring initial transition locations.')
         self._extract_shift_pos(column='pred')
 
-        # todo - clean up this part
         if smooth_model == 'v1':
-            self._log(1, f'Smoothing via model {smooth_model}.')
+            self._log(1, f'Found {len(self._suspects)} suspects.')
+            self._log(1, f'Smoothing by filling gaps <{smooth_window}.')
             self._smooth_noise(smooth_window)
             self._log(1, 'Re-exctracting crossover positions.')
             suspects = self._extract_shift_pos(column='updated')
         elif smooth_model == 'v2':
-            self._log(1, f'Smoothing via model {smooth_model}.')
-            self._smooth_noise2(smooth_frac=0.06)
+            self._log(1, f'Smoothing by applying local ({match_cutoff}) regression.')
+            self._smooth_noise2(smooth_frac=match_cutoff)
         elif smooth_model == 'v3':
-            self._log(1, f'Smoothing via model {smooth_model}.')
+            self._log(1, f'Smoothing by applying rolling mean. Window size = {smooth_window}.')
             self._smooth_noise3(window_size=smooth_window)
             self._log(1, 'Re-exctracting crossover positions.')
             suspects = self._extract_shift_pos(column='updated')
         elif smooth_model == 'v4':
-            self._log(1, 'Extractring suspect crossover positions.')
-            self._log(1, f'Found {len(suspects)} suspects.')
-            self._log(1, 'Re-aligning peaks.')
+            self._log(1, f'Found {len(self.suspects)} suspects.')
+            self._log(1, f'Re-aligning peaks by maximal difference in local (window = {smooth_window}) area.')
             suspects = self._realign_shifts(suspects, smooth_window)
         else:
-            self._log(2, f'Invalid smoothing function type "{smooth_model}". Exiting.')
+            self._log(2, f'Invalid smoothing function type "{smooth_model}". Attempting to continue.')
         self._smooth_window = smooth_window
+        self._log(1, f'Found {len(self._suspects)} suspects post smoothing.')
 
-
-        self._log(1, f'Found {len(self._suspects)} suspects.')
-        # self._suspects = self._suspects[['chrm', 'end', 'updated', 'change']]
         self._log(1, f'Looking for reciprocal crossover positions.')
         self.try_match(match_cutoff)
         co_no_dups = self.crossovers[['chrm', 'start', 'end', 'probs', 'updated', 'change',
@@ -516,11 +527,11 @@ if __name__ == '__main__':
     if args.verbose:
         log_level -= 1
     sample = CrossoverDetector(log_level=log_level)
-    sample.preprocess(args.bedgraph, method=args.method, group_count=args.group_count, bin_size=args.bin_size)
+    sample.transform_data(args.bedgraph, method=args.method, group_count=args.group_count, bin_size=args.bin_size)
     if args.context:
-        sample.read_context(args.context)
+        sample._read_context(args.context)
     if args.hmm:
-        sample.load_pickle(args.hmm)
+        sample._load_model(args.hmm)
     
     # Fitting
     if args.fit:
