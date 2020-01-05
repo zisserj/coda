@@ -45,8 +45,8 @@ class CrossoverDetector():
             msg = f'[{ts}, {level_names[level].rjust(5)}] ' + message
             print(msg)
 
-    def transform_data(self, bedgraph: str, method='arbitrary', group_count=20, bin_size=6000):
-        self._log(0, 'transform_data(bedgraph="{}", method="{}", group_count={}, bin_size={}.'.format(\
+    def load_data(self, bedgraph: str, method='arbitrary', group_count=20, bin_size=6000):
+        self._log(0, 'load_data(bedgraph="{}", method="{}", group_count={}, bin_size={}.'.format(\
                         bedgraph, method, group_count, bin_size))
         # Load coverage file
         try:
@@ -424,32 +424,39 @@ class CrossoverDetector():
 
         return pd.concat(res, axis=1)
 
-    def genome_hmm_preprocess(self, bedgraph: str, context_fname: str,
+    def coda_preprocess(self, bedgraph: str, context_fname: str, model_fname: str,
             method='arbitrary', group_count=20, bin_size=6000):
-        self._log(0, 'genome_hmm_preprocess(bedgraph="{}", method="{}", group_count={}, bin_size={}.'.format(\
+        self._log(0, 'coda_preprocess(bedgraph="{}", method="{}", group_count={}, bin_size={}.'.format(
                         bedgraph, method, group_count, bin_size))
-        self._log(1, f'Reading centromere boundries from file "{context_fname}".')
-        self._log(1, f'Initializing new HM model. n_components = {n_components}, Passing args = {str(kwargs)}')
+        self._log(1, f'Loading and aggregating data from file "{bedgraph}" according to method "{method}".')
+        self.load_data(bedgraph=bedgraph, method=method, group_count=group_count, bin_size=bin_size)
+        if context_fname:
+            self._log(1, f'Reading centromere boundries from file "{context_fname}".')
+            self._read_context(context_fname)
+        if model_fname:
+            self._log(1, f'Attempting to load trained hidden markov model from file "{model_fname}".')
+            self._load_model(model_fname)
 
 
-    def genome_hmm_fit(self, fname: str):
-        self._log(0, f'genome_hmm_fit(fname="{self._sample_name}")')
-        #
-        self._log(0, f'Loading pickled HMM from file "{fname}".')
-        #
+    def coda_fit(self, fname: str):
+        self._log(0, f'coda_fit(fname="{self._sample_name}")')
+        if not self.flags['is_fit']:
+            self._log(1, f'Initializing new HM model.')
+            self._hmm_init()
         time_start = time.time()
-        self._fit_model(output_file==fname)
+        self._fit_model(output_file=fname)
         time_end = time.time()
         self._log(1, f'Done. Time taken: {round((time_end - time_start), 3)}sec. Saved to "{fname}".')
 
 
-    def genome_hmm_detection(self, smooth_model='v1', smooth_window=10, match_cutoff=0.05, refine=False, **kwargs):
-        self._log(0, f'genome_hmm_detection(smooth_model={smooth_model}, ' +
+    def coda_detect(self, smooth_model='v1', smooth_window=10, match_cutoff=0.05, refine=False, **kwargs):
+        self._log(0, f'coda_detect(smooth_model={smooth_model}, ' +
             f'smooth_window={smooth_window}, match_cutoff={match_cutoff}, refine={refine}, {kwargs})')
         self._log(1, f'Started genome_hmm_detection() on "{self._sample_name}"')
         if self._flags['is_fit'] == False:
             self._log(1, 'Fitting HMM based on this sample.')
             self._fit_model()
+        
         self._log(1, 'Predicting most likely state according to HMM.')
         self._predict_hmm()
         
@@ -493,7 +500,6 @@ class CrossoverDetector():
     
 
 if __name__ == '__main__':
-    # todo: migrate xover_script02 as module default (hmm_analysis -m) 
     parser = argparse.ArgumentParser(description='Coda: Train and predict crossover positions using Hidden Markov Models.')
 
     verbosity = parser.add_mutually_exclusive_group()
@@ -507,7 +513,7 @@ if __name__ == '__main__':
     parser.add_argument('-context', type=str, help='Genome centromere (noisy) positions to be ignored.')
     parser.add_argument('--hmm', '--model', type=str, help='Trained model to use.')
 
-    subparsers = parser.add_subparsers(help='Available functionalities')
+    subparsers = parser.add_subparsers(required=True, help='Available functionalities')
     
     parser_fit = subparsers.add_parser('fit', help='Use sample to fit a hidden markov model.')
     parser_fit.add_argument('-output', type=str, required=True, help='File to store the learned model parameters. Can be the same file as --hmm.')
@@ -526,20 +532,18 @@ if __name__ == '__main__':
         log_level += 1
     if args.verbose:
         log_level -= 1
+    
     sample = CrossoverDetector(log_level=log_level)
-    sample.transform_data(args.bedgraph, method=args.method, group_count=args.group_count, bin_size=args.bin_size)
-    if args.context:
-        sample._read_context(args.context)
-    if args.hmm:
-        sample._load_model(args.hmm)
+    sample.coda_preprocess(bedgraph=args.bedgraph, context_fname=args.context, model_fname=args.hmm,
+            method=args.method, group_count=args.group_count, bin_size=args.bin_size)
     
     # Fitting
     if args.fit:
-        sample.genome_hmm_fit(args.output)
+        sample.coda_fit(args.output)
     
     # Predicting
     if args.predict:
-        sample.genome_hmm_detection(smooth_model=args.smooth_model,
+        sample.coda_detect(smooth_model=args.smooth_model,
             smooth_window=args.smooth_window, match_cutoff=args.match_cutoff, refine=args.refine)
         res = sample.crossovers
         res.to_csv(sample._sample_name + ".crossovers", sep='\t', index=False)
