@@ -44,6 +44,8 @@ class CrossoverDetector():
             ts = datetime.datetime.now().isoformat(sep=' ', timespec='milliseconds')
             msg = f'[{ts}, {level_names[level].rjust(5)}] ' + message
             print(msg)
+        if level >= 3:
+            exit()
 
     def load_data(self, bedgraph: str, method='arbitrary', group_count=20, bin_size=6000):
         self._log(0, 'load_data(bedgraph="{}", method="{}", group_count={}, bin_size={}.'.format(\
@@ -71,6 +73,8 @@ class CrossoverDetector():
                 data_agg.loc[chrm_df, 'bin_num'] = bin_num
             data_agg = data_agg.groupby(['chrm', 'bin_num']).agg({'start':'min',
                 'end':'max', 'val':'mean'}).reset_index(0).reset_index(drop=True)
+        else:
+            self._log(3, 'Unrecognised aggregation method. Quitting.')
         data_agg.val = data_agg.val / data_agg.val.max() # normalise to [0-1]
         self._data = data_agg
 
@@ -141,8 +145,9 @@ class CrossoverDetector():
             self._log(2, "Context not available. This might affect the quality of the analysis.")
             fit_sequences = self.sequences
         
-        if not self.HMM:
+        if not self._flags['is_fit']:
             self._log(2, 'Initializing new model.')
+            self._hmm_init()
 
         # Re-shape list of observations to nparray for HMM input
         obs_reshape = [np.reshape(obs, (len(obs), 1)) for obs in fit_sequences]
@@ -160,7 +165,6 @@ class CrossoverDetector():
                     pickle.dump(self.HMM, f)
             except Exception as ex:
                 self._log(3, f'Failed to write to "{output_file}". Please check the directory exists and has suitable permissions.\n{ex}')
-
 
     def _predict_hmm(self):
         self._log(0, f'_predict_hmm()')
@@ -185,7 +189,7 @@ class CrossoverDetector():
         data_predictions['pred'] = updated_preds
         data_predictions['probs'] = [i.round(3) for chrm in probs for i in chrm]
         self._data_predictions = data_predictions
-    
+
     def _extract_shift_pos(self, column='pred'):
         self._log(0, f'_extract_shift_pos(column="{column}")')
         data_diff = self._data_predictions.copy()
@@ -404,14 +408,14 @@ class CrossoverDetector():
         self._flags['refined'] = True
         return pd.DataFrame(refined_co)
 
-    def lift_syri(self, syri_file, genome_a_name):
-        self._log(0, f'lift_syri(syri_file="{syri_file}", genome_a_name="{genome_a_name}")')
+    def lift_syri(self, syri_file):
+        self._log(0, f'lift_syri(syri_file="{syri_file}")')
         names = ['a_chr', 'a_start', 'a_end', 'a_seq', 'b_seq',
                  'b_chr', 'b_start', 'b_end', 'id', 'parent_id', 'ann', 'cp']
         syri = pd.read_csv(syri_file, sep='\t', header=None,
                 names = names, na_values='-', usecols=[0,1,2,5,6,7,8,9,10,11])
+        genome_a_name = self._data.iloc[0:1,0].str.replace( r'[\d]+','', regex=True)
         syri['a_chr'] = syri['a_chr'].str.replace('Chr', genome_a_name)
-
         sus_end = self.crossovers.end
         syri_start = syri.a_start.values
         syri_end = syri.a_end.values
@@ -421,7 +425,6 @@ class CrossoverDetector():
             (((sus_end[:, None] >= syri_start) & (sus_end[:, None] <= syri_end)))) # or bin end in syri region
         
         res = [self.crossovers.iloc[sus_idx].reset_index(), syri.loc[syri_idx].reset_index(drop=True)]
-
         return pd.concat(res, axis=1)
 
     def coda_preprocess(self, bedgraph: str, context_fname: str, model_fname: str,
@@ -498,6 +501,23 @@ class CrossoverDetector():
             self.crossovers = ref
         self._log(1, 'Done.')
     
+    def coda_output(self, prefix, table=True, plot=True, raw_predictions=False, syri=None):
+        self._log(0, f'coda_output(prefix="{prefix}", table={table}, plot={plot}, raw_predictions={raw_predictions})')
+        self._log(1, f'Outputting results to files (prefix="{prefix}").')
+
+        if not any(table, plot, raw_predictions, syri):
+            self._log(2, f'No output options selected.')
+            return
+        
+        if table:
+            self.crossovers.to_csv(prefix + "_crossovers.csv", index=False)
+        if plot:
+            self.plot_hmm(fname=prefix + '_predictions.png')
+        if raw_predictions:
+            self._data_predictions.to_csv(prefix + "_raw_predictions.csv")
+        if syri:
+            self.lift_syri(syri).to_csv(prefix + '_syri.csv', index=False)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Coda: Train and predict crossover positions using Hidden Markov Models.')
@@ -507,13 +527,13 @@ if __name__ == '__main__':
     verbosity.add_argument('-q', '--quiet', action='store_true')
 
     parser.add_argument('bedgraph', type=str, help='Sample coverage file, produced by bedtools.')
-    parser.add_argument('-method', type=str, choices=['arbitrary', 'robust'], default='aribtrary', help='Group aggregation method.')
+    parser.add_argument('-method', type=str, choices=['arbitrary', 'robust'], default='arbitrary', help='Group aggregation method.')
     parser.add_argument('-group_count', type=int, default=20, help='[Arbitrary] Number of points to be aggregated per bin (20).')
     parser.add_argument('-bin_size', type=int, default=8000, help='[Robust] Size of bin, in which all points are aggregated (8000).')
     parser.add_argument('-context', type=str, help='Genome centromere (noisy) positions to be ignored.')
     parser.add_argument('--hmm', '--model', type=str, help='Trained model to use.')
 
-    subparsers = parser.add_subparsers(required=True, help='Available functionalities')
+    subparsers = parser.add_subparsers(dest='function', required=True, help='Available functionalities')
     
     parser_fit = subparsers.add_parser('fit', help='Use sample to fit a hidden markov model.')
     parser_fit.add_argument('-output', type=str, required=True, help='File to store the learned model parameters. Can be the same file as --hmm.')
@@ -523,6 +543,7 @@ if __name__ == '__main__':
     parser_predict.add_argument('--smooth-window', type=int, default=10, help='Maximum window of bins by which a transition is considered "noise". (10)')
     parser_predict.add_argument('--match-cutoff', type=float, default=0.05, help='Percentage of genome to look at for reciprocal crossovers. (0.05)')
     parser_predict.add_argument('--refine', action='store_true', default=False, help='[EXPERIMENTAL] Attempt to improve position accuracy by using the raw data.')
+    parser_predict.add_argument('--syri', type=str, default='', help='[EXPERIMENTAL] Exctract crossover positions in Syri file.')
     
     args = parser.parse_args()
     
@@ -538,17 +559,14 @@ if __name__ == '__main__':
             method=args.method, group_count=args.group_count, bin_size=args.bin_size)
     
     # Fitting
-    if args.fit:
+    if args.function == 'fit':
         sample.coda_fit(args.output)
     
     # Predicting
-    if args.predict:
+    if args.function == 'predict':
         sample.coda_detect(smooth_model=args.smooth_model,
             smooth_window=args.smooth_window, match_cutoff=args.match_cutoff, refine=args.refine)
-        res = sample.crossovers
-        res.to_csv(sample._sample_name + ".crossovers", sep='\t', index=False)
-    
-    # sample.plot_hmm(to_fname=sample._sample_name.replace('.bedgraph', '.png'))
+        sample.coda_output(args.bedgraph, syri=args.syri)
 
     # syri = sample.lift_syri('/home/labs/alevy/zisserh/datasets/TAIR10/syri_denovo.out', 'col')
     # syri.to_csv(sample_name + ".syri", sep='\t', index=False)
