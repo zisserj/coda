@@ -47,4 +47,4 @@ bedtools coverage -counts -sorted -a "$TEMPLATE" -b "$fname".dedup.q30.sorted.ba
 
 module load anaconda
 source "$CONDA_PREFIX"/bin/activate xoe
-python -m coda "$fname".dedup.cov-200-200.bedgraph
+python coda.py "$fname".dedup.cov-200-200.bedgraph predict

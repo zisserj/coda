@@ -427,7 +427,7 @@ class CrossoverDetector():
         res = [self.crossovers.iloc[sus_idx].reset_index(), syri.loc[syri_idx].reset_index(drop=True)]
         return pd.concat(res, axis=1)
 
-    def coda_preprocess(self, bedgraph: str, context_fname: str, model_fname: str,
+    def coda_preprocess(self, bedgraph: str, context_fname: str, model_fname = '',
             method='arbitrary', group_count=20, bin_size=6000):
         self._log(0, 'coda_preprocess(bedgraph="{}", method="{}", group_count={}, bin_size={}.'.format(
                         bedgraph, method, group_count, bin_size))
@@ -491,10 +491,10 @@ class CrossoverDetector():
 
         self._log(1, f'Looking for reciprocal crossover positions.')
         self.try_match(match_cutoff)
-        co_no_dups = self.crossovers[['chrm', 'start', 'end', 'probs', 'updated', 'change',
-            'pos_ler', 'possible_dup', 'binsize', 'binsize_percentile', 'context']]
-        uncertain = len(self.crossovers) - len(co_no_dups)
-        self._log(1, f'{len(co_no_dups)} crossovers found, {uncertain} more possible duplicate(s).')
+        co_filter = self.crossovers[~self.crossovers.possible_dup]
+        co_filter = co_filter[co_filter.context.isna()]
+        uncertain = len(self.crossovers) - len(co_filter)
+        self._log(1, f'{len(co_filter)} crossovers found, {uncertain} more possible positions(s).')
         if refine:
             self._log(1, 'Refining crossover locations.')
             ref = self._refine_crossovers()
@@ -503,9 +503,9 @@ class CrossoverDetector():
     
     def coda_output(self, prefix, table=True, plot=True, raw_predictions=False, syri=None):
         self._log(0, f'coda_output(prefix="{prefix}", table={table}, plot={plot}, raw_predictions={raw_predictions})')
-        self._log(1, f'Outputting results to files (prefix="{prefix}").')
+        self._log(1, f'Outputting results to files, dir = "{prefix}".')
 
-        if not any(table, plot, raw_predictions, syri):
+        if not any([table, plot, raw_predictions, syri]):
             self._log(2, f'No output options selected.')
             return
         
@@ -526,12 +526,12 @@ if __name__ == '__main__':
     verbosity.add_argument('-v', '--verbose', action='store_true')
     verbosity.add_argument('-q', '--quiet', action='store_true')
 
-    parser.add_argument('bedgraph', type=str, help='Sample coverage file, produced by bedtools.')
-    parser.add_argument('-method', type=str, choices=['arbitrary', 'robust'], default='arbitrary', help='Group aggregation method.')
-    parser.add_argument('-group_count', type=int, default=20, help='[Arbitrary] Number of points to be aggregated per bin (20).')
-    parser.add_argument('-bin_size', type=int, default=8000, help='[Robust] Size of bin, in which all points are aggregated (8000).')
-    parser.add_argument('-context', type=str, help='Genome centromere (noisy) positions to be ignored.')
+    parser.add_argument('--method', type=str, choices=['arbitrary', 'robust'], default='arbitrary', help='Group aggregation method.')
+    parser.add_argument('--group-count', type=int, default=20, help='[Arbitrary] Number of points to be aggregated per bin (20).')
+    parser.add_argument('--bin-size', type=int, default=8000, help='[Robust] Size of bin, in which all points are aggregated (8000).')
+    parser.add_argument('--context', type=str, help='Genome centromere (noisy) positions to be ignored.')
     parser.add_argument('--hmm', '--model', type=str, help='Trained model to use.')
+    parser.add_argument('bedgraph', type=str, help='Sample coverage file, produced by bedtools.')
 
     subparsers = parser.add_subparsers(dest='function', required=True, help='Available functionalities')
     
