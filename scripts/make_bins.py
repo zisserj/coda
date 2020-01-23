@@ -26,6 +26,8 @@ for chrm, row in genome_sizes.iterrows():
     chrm_bins_df.append(df)
 
 bin_table = pd.concat(chrm_bins_df)
+
+args.reference = args.reference.split('.')[0]
 if args.binStep == args.binSize:
     name_out = f'{args.reference}.bins-{args.binSize}.txt'
 else:

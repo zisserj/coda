@@ -2,16 +2,16 @@ import argparse
 import pandas as pd
 
 parser = argparse.ArgumentParser(description='Creates an informative bin template based on coverage A and B as produced by bedtools.')
-parser.add_argument('coverageA', type=str, help='Coverage bedgraph of control parent A.')
-parser.add_argument('coverageB', type=str, help='Coverage bedgraph of control parent B.')
-parser.add_argument('outFile', type=str, help='Filename to output the resulting template to.')
+parser.add_argument('covA', type=str, help='Coverage bedgraph of control parent A.')
+parser.add_argument('covB', type=str, help='Coverage bedgraph of control parent B.')
+parser.add_argument('out', type=str, help='Filename to output the resulting template to.')
 args = parser.parse_args()
 
 
-print(f'Creating bin template using "{args.coverageA}" and "{args.coverageB}".')
+print(f'Creating bin template using "{args.covA}" and "{args.covB}".')
 
-genome_a = pd.read_csv(args.coverageA, sep='\t', names=['chrm', 'start', 'end', 'val'])
-genome_b = pd.read_csv(args.coverageB, sep='\t', names=['chrm', 'start', 'end', 'val'])
+genome_a = pd.read_csv(args.covA, sep='\t', names=['chrm', 'start', 'end', 'val'])
+genome_b = pd.read_csv(args.covB, sep='\t', names=['chrm', 'start', 'end', 'val'])
 
 genome_names = genome_a.chrm.str.replace(r'\d', '', regex=True).unique()
 # Make sure the names are in the correct order
@@ -36,7 +36,6 @@ genome_template = genome_reads[genome_reads.keep].iloc[:, :3]
 
 try:
     genome_template.to_csv(args.outFile, sep='\t', index=False, header=False)
-    print(f'Done. Template written to "{args.outFile}".')
+    print(f'Done. Template written to "{args.out}".')
 except Exception as ex:
-    print(f'Failed to write results to "{args.outFile}". Please check the directory exists and has suitable permissions.\n{ex}')
-
+    print(f'Failed to write results to "{args.out}". Please check the directory exists and has suitable permissions.\n{ex}')
