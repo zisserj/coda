@@ -20,7 +20,7 @@ Development of Coda was done in [Weizmann Institute, Avraham Levy's Lab](https:/
 
 # Coda workflow
 
-![image.png](attachment:image.png)
+![coda_workflow.png](README_files/coda_workflow.png)
 
 ## Assembling the reference
 1. **Change fasta file headers.** Determines the chromosome notation used downstream. Use distinct, alphabetical names. *Do not* use digits.
@@ -218,7 +218,7 @@ sample1.coda_preprocess(sample_file, context_fname='centromere_pos.bed', group_c
 sample1.coda_detect(smooth_model='v1', smooth_window=10)
 ```
 
-    `[2020-01-23 14:50:01.754,  INFO] Loading and aggregating data from file "/home/labs/alevy/zisserh/proj/crossover_detection/README_files/example.dedup.cov-200.bedgraph" according to method "arbitrary".
+    [2020-01-23 14:50:01.754,  INFO] Loading and aggregating data from file "/home/labs/alevy/zisserh/proj/crossover_detection/README_files/example.dedup.cov-200.bedgraph" according to method "arbitrary".
     [2020-01-23 14:50:02.418,  INFO] Successfully loaded 'README_files/example.dedup.cov-200.bedgraph'. Mean coverage is 10.732.
     [2020-01-23 14:50:02.418,  INFO] Reading centromere boundries from file "centromere_pos.bed".
     [2020-01-23 14:50:02.425,  INFO] Started genome_hmm_detection() on "KirilsF2_7_S7_.dedup.cov.bedgraph"
@@ -232,7 +232,7 @@ sample1.coda_detect(smooth_model='v1', smooth_window=10)
     [2020-01-23 14:50:06.983,  INFO] Found 29 suspects post smoothing.
     [2020-01-23 14:50:06.983,  INFO] Looking for reciprocal crossover positions.
     [2020-01-23 14:50:07.277,  INFO] 6 crossovers found, 2 more possible duplicate(s).
-    [2020-01-23 14:50:07.278,  INFO] Done.`
+    [2020-01-23 14:50:07.278,  INFO] Done.
 
 
 
