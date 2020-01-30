@@ -536,14 +536,15 @@ if __name__ == '__main__':
     subparsers = parser.add_subparsers(dest='function', required=True, help='Available functionalities')
     
     parser_fit = subparsers.add_parser('fit', help='Use sample to fit a hidden markov model.')
-    parser_fit.add_argument('-output', type=str, required=True, help='File to store the learned model parameters. Can be the same file as --hmm.')
+    parser_fit.add_argument('-output-hmm', type=str, required=True, help='File to store the learned model parameters. Can be the same file as --hmm.')
 
     parser_predict = subparsers.add_parser('predict', help='Detect F2 sample crossover locations.')
     parser_predict.add_argument('--smooth-model', type=str, default='v1', help='Method of dealing with noise. Detailed in docs. (v1)')
     parser_predict.add_argument('--smooth-window', type=int, default=10, help='Maximum window of bins by which a transition is considered "noise". (10)')
     parser_predict.add_argument('--match-cutoff', type=float, default=0.05, help='Percentage of genome to look at for reciprocal crossovers. (0.05)')
     parser_predict.add_argument('--refine', action='store_true', default=False, help='[EXPERIMENTAL] Attempt to improve position accuracy by using the raw data.')
-    parser_predict.add_argument('--syri', type=str, default='', help='[EXPERIMENTAL] Exctract crossover positions in Syri file.')
+    parser_predict.add_argument('--syri', type=str, default='', help='[EXPERIMENTAL] Exctract crossover positions from Syri file.')
+    parser_predict.add_argument('--output-raw', action='store_true', help='Output raw per bin predictions.')
     
     args = parser.parse_args()
     
@@ -560,13 +561,13 @@ if __name__ == '__main__':
     
     # Fitting
     if args.function == 'fit':
-        sample.coda_fit(args.output)
+        sample.coda_fit(args.output_hmm)
     
     # Predicting
     if args.function == 'predict':
         sample.coda_detect(smooth_model=args.smooth_model,
             smooth_window=args.smooth_window, match_cutoff=args.match_cutoff, refine=args.refine)
-        sample.coda_output(args.bedgraph, syri=args.syri)
+        sample.coda_output(args.bedgraph, syri=args.syri, raw_predictions=args.output_raw)
 
     # syri = sample.lift_syri('/home/labs/alevy/zisserh/datasets/TAIR10/syri_denovo.out', 'col')
     # syri.to_csv(sample_name + ".syri", sep='\t', index=False)
