@@ -71,7 +71,7 @@ python make_bins.py genomeAB_sizes.txt 200
 ```bash
 bedtools coverage -counts -sorted -a genomeAB_sizes.bins.txt -b genomeA_control_merged.sorted.dedup.bam > genomeA_control.cov-sizes.bedgraph
 ```
-8. **Filter uninformative bins** with `filter_genomes.py`. This results in reads that aren't unique to either parent to be thrown out, resulting in a much cleaner template.
+8. **Filter uninformative bins** with `filter_genomes.py`. This results in reads that aren't unique to either parent to be thrown out, resulting in a much cleaner template called in this example `genomeAB_template.cov-sizes.bedgraph`.
 ```bash
 python filter_genomes.py genomeA_control.cov-sizes.bedgraph genomeB_control.cov-sizes.bedgraph genomeAB_template.cov-sizes.bedgraph
 ```
