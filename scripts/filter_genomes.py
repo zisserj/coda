@@ -35,7 +35,7 @@ print('{0:.2f}% bins kept past filtering.'.format(keep))
 genome_template = genome_reads[genome_reads.keep].iloc[:, :3]
 
 try:
-    genome_template.to_csv(args.outFile, sep='\t', index=False, header=False)
+    genome_template.to_csv(args.out, sep='\t', index=False, header=False)
     print(f'Done. Template written to "{args.out}".')
 except Exception as ex:
     print(f'Failed to write results to "{args.out}". Please check the directory exists and has suitable permissions.\n{ex}')

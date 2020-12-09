@@ -33,7 +33,7 @@ if args.binStep == args.binSize:
 else:
     name_out = f'{args.reference}.bins-{args.binSize}-{args.binStep}.txt'
 try:
-    bin_table.to_csv(name_out, sep='\t', index=False)
+    bin_table.to_csv(name_out, sep='\t', index=False, header=False)
     print(f'Done. Bin table written to "{name_out}".')
 except Exception as ex:
     print(f'Failed to write results to "{name_out}". Please check the directory exists and has suitable permissions.\n{ex}')
